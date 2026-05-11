@@ -9,12 +9,15 @@
 class AudioVolume	{
 private:
 	static constexpr short MIN_VOLUME = 0;
-	static constexpr short MAX_VOLUME = 100;
-	static constexpr short DEFAULT_VOLUME = 50;
+	static constexpr short MAX_VOLUME = 127;
+	
+	short defaultVolume = 100;
 	
 	bool muted = false;
-	short vol = DEFAULT_VOLUME;
+	short vol = defaultVolume;
 public:
+	explicit AudioVolume(short defaultVolume) :
+		defaultVolume(defaultVolume) {}
 	void set(short vol)	{
 		if (vol < MIN_VOLUME || vol > MAX_VOLUME)
 			throw std::out_of_range("Attempted setting invalid volume value");
@@ -34,7 +37,7 @@ public:
 		return MAX_VOLUME;
 	}
 	void resetToDefault()	{
-		set(DEFAULT_VOLUME);
+		set(defaultVolume);
 	}
 	void mute()	{
 		muted = true;
@@ -50,7 +53,7 @@ class AudioBPM	{
 private:
 	static constexpr float MIN_BPM = 30;
 	static constexpr float MAX_BPM = 240;
-	static constexpr float DEFAULT_BPM = 50;
+	static constexpr float DEFAULT_BPM = 120;
 	
 	float bpm = DEFAULT_BPM;
 public:
@@ -268,8 +271,9 @@ public:
 class AudioOctave	{
 private:
 	static constexpr short MIN_OCTAVE = 1;
-	static constexpr short MAX_OCTAVE = 8;
-	static constexpr short DEFAULT_OCTAVE = 4;
+	static constexpr short MAX_OCTAVE = 9;
+	
+	short defaultOctave = 6;
 	
 	static std::string nameOct(short oct)	{
 		std::string num_suffix;
@@ -293,8 +297,10 @@ private:
 		short oct_val;
 		std::string oct_name;
 	};
-	Octave oct = {DEFAULT_OCTAVE, nameOct(DEFAULT_OCTAVE)};
+	Octave oct = {defaultOctave, nameOct(defaultOctave)};
 public:
+	explicit AudioOctave(short defaultOctave) :
+		defaultOctave(defaultOctave) {}
 	void set(short oct_val)	{
 		if (oct_val < MIN_OCTAVE || oct_val > MAX_OCTAVE)
 			throw std::out_of_range("Attempted setting invalid octave value");
@@ -319,7 +325,7 @@ public:
 		return oct.oct_name;
 	}
 	void resetToDefault()	{
-		set(DEFAULT_OCTAVE);
+		set(defaultOctave);
 	}
 };
 class AudioParameters	{
@@ -366,14 +372,28 @@ public:
 		}
 	}
 };
-class OctaveChangeEvent	: public AudioEvent	{ //Único método nas especificações é incrementar a oitava
+class OctaveChangeEvent	: public AudioEvent	{ //Altera oitava com valor relativo
+private:
+	short octShift;
 public:
+	explicit OctaveChangeEvent(short octShift) :
+		octShift(octShift) {}
 	void runEvent(AudioParameters &params) override	{
-		short nextOct = params.oct.getVal()+1;
-		if(nextOct > params.oct.getMax())
+		short oct = params.oct.getVal() + octShift;
+		if(oct > params.oct.getMax() || oct < params.oct.getMin())
 			params.oct.resetToDefault();
 		else
-			params.oct.set(nextOct);
+			params.oct.set(oct);
+	}
+};
+class BpmChangeEvent : public AudioEvent	{ //Altera bpm com valor relativo
+private:
+	float bpmShift;
+public:
+	explicit BpmChangeEvent(float bpmShift) :
+		bpmShift(bpmShift) {}
+	void runEvent(AudioParameters &params) override	{
+		params.bpm.setClamped(params.bpm.get()+bpmShift);
 	}
 };
 class EventMapper {
@@ -392,18 +412,19 @@ public:
                 return std::make_unique<InstrumentChangeEvent>(15);
 			case ',':
 				return std::make_unique<InstrumentChangeEvent>(114);
-            case '\n':
-                return std::make_unique<InstrumentChangeEvent>(123);
 			case 'o':
-			case 'O':
 			case 'i':
-			case 'I':
 			case 'u':
-			case 'U':
 				return std::make_unique<InstrumentChangeEvent>(110);
 			case '?':
 			case '.':
-				return std::make_unique<OctaveChangeEvent>();
+				return std::make_unique<OctaveChangeEvent>(1);
+			case 'V':
+				return std::make_unique<OctaveChangeEvent>(-1);
+			case '<':
+				return std::make_unique<BpmChangeEvent>(-10);
+			case '>':
+				return std::make_unique<BpmChangeEvent>(10);
 			
         }
 	}
