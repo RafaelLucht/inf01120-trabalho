@@ -342,27 +342,56 @@ public:
 		virtual ~AudioEvent() = default;
 		virtual void runEvent(AudioParameters &params) = 0;
 };
-class InstrumentChangeEvent : public AudioEvent	{
+class InstrumentChangeEvent : public AudioEvent	{ //Muda instrumento com valor absoluto ou relativo. Absoluto é o default; somente relativo precisa ser especificado
+public:
+	enum class ChangeMode	{
+		ABSOLUTE,
+		RELATIVE
+	};
 private:
 	short midi_val;
+	ChangeMode mode;
 public:
-	explicit InstrumentChangeEvent(short midi_val) :
-		midi_val(midi_val) {}
+	explicit InstrumentChangeEvent(short midi_val, ChangeMode mode = ChangeMode::ABSOLUTE) :
+		midi_val(midi_val), mode(mode) {}
 
 	void runEvent(AudioParameters &params) override	{
-		params.inst.set(midi_val);
+		switch (mode)	{
+			case ChangeMode::ABSOLUTE :
+				params.inst.set(midi_val);
+				break;
+			case ChangeMode::RELATIVE :
+				params.inst.set(params.inst.getVal() + midi_val);
+				break;
+		}
 	}
 };
-
-
+class OctaveChangeEvent	: public AudioEvent	{ //Único método nas especificações é incrementar a oitava
+public:
+	void runEvent(AudioParameters &params) override	{
+		short nextOct = params.oct.getVal()+1;
+		if(nextOct > params.oct.getMax())
+			params.oct.resetToDefault();
+		else
+			params.oct.set(nextOct);
+	}
+};
 class EventMapper {
+private:
+	static bool isAnEvenDigit(char c)	{
+		return (c >= '0' && c <= '9') && ((c & 1) == 0);
+	}
 public:
     static std::unique_ptr<AudioEvent> triggerEvent(char eventKey) { //Recebe caractere chave e retorna uma classe evento via ponteiro especial
+		if (isAnEvenDigit(eventKey))
+			return std::make_unique<InstrumentChangeEvent>(eventKey-'0', InstrumentChangeEvent::ChangeMode::RELATIVE);
         switch (eventKey) {
             case '!':
                 return std::make_unique<InstrumentChangeEvent>(24);
             case ';':
                 return std::make_unique<InstrumentChangeEvent>(15);
+			case ',':
+				return std::make_unique<InstrumentChangeEvent>(114);
             case '\n':
                 return std::make_unique<InstrumentChangeEvent>(123);
 			case 'o':
@@ -372,9 +401,10 @@ public:
 			case 'u':
 			case 'U':
 				return std::make_unique<InstrumentChangeEvent>(110);
+			case '?':
+			case '.':
+				return std::make_unique<OctaveChangeEvent>();
 			
-            default:
-                return nullptr;
         }
 	}
 };
