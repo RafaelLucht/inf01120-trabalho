@@ -367,7 +367,7 @@ public:
 				params.inst.set(midi_val);
 				break;
 			case ChangeMode::RELATIVE :
-				params.inst.set(params.inst.getVal() + midi_val);
+				params.inst.setClamped(params.inst.getVal() + midi_val);
 				break;
 		}
 	}
@@ -394,6 +394,12 @@ public:
 		bpmShift(bpmShift) {}
 	void runEvent(AudioParameters &params) override	{
 		params.bpm.setClamped(params.bpm.get()+bpmShift);
+	}
+};
+class VolumeChangeEvent : public AudioEvent	{ //Altera volume (sempre volume *= 2 por enquanto)
+public:
+	void runEvent(AudioParameters &params) override	{
+		params.vol.setClamped(params.vol.get()*2);
 	}
 };
 class EventMapper {
@@ -425,6 +431,8 @@ public:
 				return std::make_unique<BpmChangeEvent>(-10);
 			case '>':
 				return std::make_unique<BpmChangeEvent>(10);
+			case ' ':
+				return std::make_unique<VolumeChangeEvent>();
 			
         }
 	}
