@@ -437,6 +437,160 @@ public:
         }
 	}
 };
+class Voice {
+private:
+    int voiceIndex;
+    int delay;
+    AudioParameters params;
+    std::vector<std::unique_ptr<AudioEvent>> events;
+
+    static constexpr std::array<short, 4> BASE_OCTAVES     = {6, 5, 4, 3};
+    static constexpr std::array<short, 4> BASE_VOLUMES     = {100, 80, 60, 40};
+    static constexpr std::array<short, 4> BASE_INSTRUMENTS = {6, 20, 0, 70};
+public:
+    explicit Voice(int voiceIndex) :
+        voiceIndex(voiceIndex),
+        delay(0),
+        params()
+    {
+        int idx = voiceIndex % 4;
+
+        params.oct.set(BASE_OCTAVES[idx]);
+        params.vol.set(BASE_VOLUMES[idx]);
+        params.inst.set(BASE_INSTRUMENTS[idx]);
+    }
+	void setDelay(int n) {
+        delay = n;
+    }
+
+    void addEvent(std::unique_ptr<AudioEvent> event) {
+        events.push_back(std::move(event));
+    }
+	int getDelay()               { return delay; }
+    int getVoiceIndex()          { return voiceIndex; }
+    AudioParameters& getParams() { return params; }
+
+    const std::vector<std::unique_ptr<AudioEvent>>& getEvents() {
+        return events;
+    }
+};
+class VoiceParser {
+private:
+    static std::vector<std::string> splitLines(const std::string& text) {
+        std::vector<std::string> lines;
+        std::string current;
+
+        for (char c : text) {
+            if (c == '\n') {
+                if (!current.empty())
+                    lines.push_back(current);
+                current.clear();
+            } else {
+                current += c;
+            }
+        }
+        if (!current.empty())
+            lines.push_back(current);
+
+        return lines;
+    }
+	static int parseDelay(std::string& line) {
+        if (line.empty() || line[0] != '[')
+            return 0;
+
+        size_t end = line.find(']');
+        if (end == std::string::npos)
+            return 0;
+
+        int delay = std::stoi(line.substr(1, end - 1));
+        line = line.substr(end + 1);
+        return delay;
+    }
+	static Voice parseLine(const std::string& line, int voiceIndex) {
+        Voice voice(voiceIndex);
+
+        std::string linecopy = line;
+        int delay = parseDelay(lineopy);
+        voice.setDelay(delay);
+
+        for (char c : lineopy) {
+            auto event = EventMapper::triggerEvent(c);
+            if (event != nullptr)
+                voice.addEvent(std::move(event));
+        }
+
+        return voice;
+    }
+public:
+    static std::vector<Voice> parse(const std::string& text) {
+        std::vector<Voice> voices;
+        std::vector<std::string> lines = splitLines(text);
+
+        for (int i = 0; i < lines.size(); i++) {
+            voices.push_back(parseLine(lines[i], i));
+        }
+
+        return voices;
+    }
+};
+class FugueScore {
+private:
+    std::vector<Voice> voices;
+    AudioBPM bpm;
+
+public:
+    FugueScore() = default;
+
+	void addVoice(Voice voice) {
+        voices.push_back(std::move(voice));
+    }
+
+    AudioBPM& getBpm() {
+        return bpm;
+    }
+
+    const std::vector<Voice>& getVoices() {
+        return voices;
+    }
+
+    int getVoiceCount() {
+        return voices.size();
+    }
+
+	// TODO: implementar play() após definir biblioteca de áudio (RtMidi/FluidSynth)
+    // deve tocar todas as vozes simultaneamente respeitando os delays de cada uma
+    // void play();
+
+	static FugueScore fromText(const std::string& text) {
+        FugueScore score;
+        std::vector<Voice> voices = VoiceParser::parse(text);
+
+        for (auto& voice : voices)
+            score.addVoice(std::move(voice));
+
+        return score;
+    }
+};
+class MidiExporter {
+public:
+    // TODO: implementar após escolha da biblioteca MIDI
+    // sugestão: RtMidi ou similar
+    
+    static void exportToFile(FugueScore& score, const std::string& filename) {
+        // para cada voz em score.getVoices():
+        //   criar trilha MIDI no canal correspondente
+        //   aplicar delay inicial em beats
+        //   converter eventos em mensagens MIDI
+        // salvar arquivo filename.mid
+    }
+
+private:
+    static void voiceToMidiTrack(const Voice& voice, int channel) {
+        // converter voice.getEvents() em mensagens MIDI
+        // canal MIDI = voice.getVoiceIndex() % 16
+        // (MIDI suporta no máximo 16 canais)
+    }
+};
 
 int main()	{
 	
