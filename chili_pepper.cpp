@@ -4,6 +4,7 @@
 #include <array>
 #include <algorithm>
 #include <memory>
+#include <vector>
 
 
 class AudioVolume	{
@@ -334,6 +335,8 @@ public:
 	AudioBPM bpm;
 	AudioInstrument inst;
 	AudioOctave oct;
+
+	AudioParameters() : vol(100), oct(6) {}
 	
 	void resetToDefaultAll()	{
 		vol.resetToDefault();
@@ -510,10 +513,10 @@ private:
         Voice voice(voiceIndex);
 
         std::string linecopy = line;
-        int delay = parseDelay(lineopy);
+        int delay = parseDelay(linecopy);
         voice.setDelay(delay);
 
-        for (char c : lineopy) {
+        for (char c : linecopy) {
             auto event = EventMapper::triggerEvent(c);
             if (event != nullptr)
                 voice.addEvent(std::move(event));
