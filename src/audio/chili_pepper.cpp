@@ -84,7 +84,8 @@ class AudioInstrument	{
 private:
 	static constexpr short MIN_MIDI_VAL = 0;
 	static constexpr short MAX_MIDI_VAL = 127;
-	static constexpr short DEFAULT_MIDI_VAL = 27;
+
+  short defaultMidiVal = 0;
 	static constexpr std::array<const char*, 128> MIDI_NAMES = {
 	//Piano
 		"Acoustic Grand Piano",
@@ -240,8 +241,10 @@ private:
 		short midi_val;
 		std::string inst_name;
 	};
-	MIDI_Instrument inst = {DEFAULT_MIDI_VAL, nameMIDI(DEFAULT_MIDI_VAL)};
+	MIDI_Instrument inst = {defaultMidiVal, nameMIDI(defaultMidiVal)};
 public:
+  explicit AudioInstrument(short defaultMidiVal) :
+    defaultMidiVal(defaultMidiVal) {}
 	void set(short midi_val)	{
 		if (midi_val < MIN_MIDI_VAL || midi_val > MAX_MIDI_VAL)
 			throw std::out_of_range("Attempted setting invalid MIDI instrument value");
@@ -266,7 +269,7 @@ public:
 		return inst.inst_name;
 	}
 	void resetToDefault()	{
-		set(DEFAULT_MIDI_VAL);
+		set(defaultMidiVal);
 	}
 };
 class AudioOctave	{
