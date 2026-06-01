@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <memory>
 #include <vector>
-#include <RtMidi.h>
+#include "RtMidi.h"
 #include <thread>
 #include <chrono>
 
