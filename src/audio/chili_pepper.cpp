@@ -445,9 +445,8 @@ public:
 		RtMidiOut midi;
 		midi.openPort(0);
 
-		float beatDuration = 60000.0f / bpm.get();
-
 		for (const Voice& voice : voices) {
+			float beatDuration = 60000.0f / bpm.get();
 			std::this_thread::sleep_for(
 				std::chrono::milliseconds((int)(voice.getDelay() * beatDuration))
 			);
@@ -455,20 +454,20 @@ public:
 			AudioParameters params = voice.getParams();
 			int channel = voice.getVoiceIndex() % 16;
 
-			// define instrumento no canal
-			std::vector<unsigned char> progChange = {
-				(unsigned char)(192 + channel),
-				(unsigned char)params.inst.getVal()
-			};
-			midi.sendMessage(&progChange);
-
-			// toca os eventos
 			for (const auto& event : voice.getEvents()) {
-				// tenta converter para NoteEvent
 				NoteEvent* noteEvent = dynamic_cast<NoteEvent*>(event.get());
 
 				if (noteEvent) {
-					// é uma nota — toca
+					// recalcula beatDuration com BPM atual
+					float beatDuration = 60000.0f / params.bpm.get();
+
+					// atualiza instrumento no canal antes de tocar
+					std::vector<unsigned char> progChange = {
+						(unsigned char)(192 + channel),
+						(unsigned char)params.inst.getVal()
+					};
+					midi.sendMessage(&progChange);
+
 					int nota = noteEvent->getNote(params);
 					std::vector<unsigned char> noteOn  = {(unsigned char)(144 + channel), (unsigned char)nota, (unsigned char)params.vol.get()};
 					std::vector<unsigned char> noteOff = {(unsigned char)(128 + channel), (unsigned char)nota, 0};
@@ -477,7 +476,6 @@ public:
 					std::this_thread::sleep_for(std::chrono::milliseconds((int)beatDuration));
 					midi.sendMessage(&noteOff);
 				} else {
-					// é um evento de controle — só executa, não toca nota
 					event->runEvent(params);
 				}
 			}
