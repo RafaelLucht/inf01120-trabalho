@@ -32,13 +32,13 @@ public:
 		short real_set_value = std::clamp(vol, MIN_VOLUME, MAX_VOLUME);
 		this->vol = real_set_value;
 	}
-	short get() { return vol; }
-	short getMin() { return MIN_VOLUME; }
-	short getMax() { return MAX_VOLUME; }
+	short get() const { return vol; }
+	short getMin() const { return MIN_VOLUME; }
+	short getMax() const { return MAX_VOLUME; }
 	void resetToDefault() { set(defaultVolume); }
 	void mute() { muted = true; }
 	void unmute() { muted = false; }
-	bool isMuted() { return muted; }
+	bool isMuted() const { return muted; }
 };
 
 class AudioBPM {
@@ -58,9 +58,9 @@ public:
 		float real_set_value = std::clamp(bpm, MIN_BPM, MAX_BPM);
 		this->bpm = real_set_value;
 	}
-	float get() { return bpm; }
-	float getMin() { return MIN_BPM; }
-	float getMax() { return MAX_BPM; }
+	float get() const { return bpm; }
+	float getMin() const { return MIN_BPM; }
+	float getMax() const { return MAX_BPM; }
 	void resetToDefault() { set(DEFAULT_BPM); }
 };
 
@@ -146,10 +146,10 @@ public:
 		inst.midi_val = real_set_val;
 		inst.inst_name = nameMIDI(real_set_val);
 	}
-	short getVal() { return inst.midi_val; }
-	short getMin() { return MIN_MIDI_VAL; }
-	short getMax() { return MAX_MIDI_VAL; }
-	std::string getName() { return inst.inst_name; }
+	short getVal() const { return inst.midi_val; }
+	short getMin() const { return MIN_MIDI_VAL; }
+	short getMax() const { return MAX_MIDI_VAL; }
+	std::string getName() const { return inst.inst_name; }
 	void resetToDefault() { set(defaultMidiVal); }
 };
 
@@ -191,9 +191,9 @@ public:
 		oct.oct_val = real_set_value;
 		oct.oct_name = nameOct(real_set_value);
 	}
-	short getVal() { return oct.oct_val; }
-	short getMin() { return MIN_OCTAVE; }
-	short getMax() { return MAX_OCTAVE; }
+	short getVal() const { return oct.oct_val; }
+	short getMin() const { return MIN_OCTAVE; }
+	short getMax() const { return MAX_OCTAVE; }
 	std::string getName() { return oct.oct_name; }
 	void resetToDefault() { set(defaultOctave); }
 };
@@ -272,6 +272,23 @@ public:
 	}
 };
 
+class NoteEvent : public AudioEvent {
+private:
+    int baseNote; // nota MIDI base (oitava 5)
+public:
+    explicit NoteEvent(int baseNote) : baseNote(baseNote) {}
+
+    void runEvent(AudioParameters& params) override {
+        // NoteEvent não muda params — só marca que há uma nota
+        // a nota real é calculada pelo play() considerando a oitava atual
+    }
+
+    int getNote(const AudioParameters& params) const {
+        int nota = baseNote + (params.oct.getVal() - 5) * 12;
+        return std::clamp(nota, 0, 127);
+    }
+};
+
 class EventMapper {
 private:
 	static bool isAnEvenDigit(char c) {
@@ -294,6 +311,14 @@ public:
 			case '<': return std::make_unique<BpmChangeEvent>(-10);
 			case '>': return std::make_unique<BpmChangeEvent>(10);
 			case ' ': return std::make_unique<VolumeChangeEvent>();
+			case 'A': return std::make_unique<NoteEvent>(69); // Lá
+			case 'B': return std::make_unique<NoteEvent>(71); // Si
+			case 'C': return std::make_unique<NoteEvent>(60); // Dó
+			case 'D': return std::make_unique<NoteEvent>(62); // Ré
+			case 'E': return std::make_unique<NoteEvent>(64); // Mi
+			case 'F': return std::make_unique<NoteEvent>(65); // Fá
+			case 'G': return std::make_unique<NoteEvent>(67); // Sol
+			case 'H': return std::make_unique<NoteEvent>(70); // Si bemol
 		}
 		return nullptr; // corrigido: evita comportamento indefinido
 	}
@@ -420,15 +445,22 @@ public:
 
 			// toca os eventos
 			for (const auto& event : voice.getEvents()) {
-				event->runEvent(params);
+				// tenta converter para NoteEvent
+				NoteEvent* noteEvent = dynamic_cast<NoteEvent*>(event.get());
 
-				int nota = 60 + (params.oct.getVal() - 5) * 12;
-				std::vector<unsigned char> noteOn  = {(unsigned char)(144 + channel), (unsigned char)nota, (unsigned char)params.vol.get()};
-				std::vector<unsigned char> noteOff = {(unsigned char)(128 + channel), (unsigned char)nota, 0};
+				if (noteEvent) {
+					// é uma nota — toca
+					int nota = noteEvent->getNote(params);
+					std::vector<unsigned char> noteOn  = {(unsigned char)(144 + channel), (unsigned char)nota, (unsigned char)params.vol.get()};
+					std::vector<unsigned char> noteOff = {(unsigned char)(128 + channel), (unsigned char)nota, 0};
 
-				midi.sendMessage(&noteOn);
-				std::this_thread::sleep_for(std::chrono::milliseconds((int)beatDuration));
-				midi.sendMessage(&noteOff);
+					midi.sendMessage(&noteOn);
+					std::this_thread::sleep_for(std::chrono::milliseconds((int)beatDuration));
+					midi.sendMessage(&noteOff);
+				} else {
+					// é um evento de controle — só executa, não toca nota
+					event->runEvent(params);
+				}
 			}
 		}
 	}
@@ -474,60 +506,56 @@ private:
 
     // gera os bytes de uma trilha MIDI a partir de uma Voice
     static std::vector<unsigned char> buildTrack(const Voice& voice, float beatDuration) {
-        std::vector<unsigned char> track;
-        int channel = voice.getVoiceIndex() % 16;
-        AudioParameters params = voice.getParams();
+		std::vector<unsigned char> track;
+		int channel = voice.getVoiceIndex() % 16;
+		AudioParameters params = voice.getParams();
 
-        // delay inicial em ticks (1 tick = 1 beat aqui)
-        uint32_t delayTicks = voice.getDelay();
+		auto pushVarLen = [&](uint32_t val) {
+			if (val < 128) {
+				track.push_back(val);
+			} else if (val < 16384) {
+				track.push_back((val >> 7) | 0x80);
+				track.push_back(val & 0x7F);
+			} else {
+				track.push_back((val >> 14) | 0x80);
+				track.push_back(((val >> 7) & 0x7F) | 0x80);
+				track.push_back(val & 0x7F);
+			}
+		};
 
-        // program change — define instrumento
-        auto pushVarLen = [&](uint32_t val) {
-            if (val < 128) {
-                track.push_back(val);
-            } else if (val < 16384) {
-                track.push_back((val >> 7) | 0x80);
-                track.push_back(val & 0x7F);
-            } else {
-                track.push_back((val >> 14) | 0x80);
-                track.push_back(((val >> 7) & 0x7F) | 0x80);
-                track.push_back(val & 0x7F);
-            }
-        };
+		// delay inicial
+		pushVarLen(voice.getDelay() * 480);
+		track.push_back(0xC0 | channel);
+		track.push_back(params.inst.getVal());
 
-        // delta time do delay
-        pushVarLen(delayTicks);
-        track.push_back(0xC0 | channel); // program change
-        track.push_back(params.inst.getVal());
+		for (const auto& event : voice.getEvents()) {
+			NoteEvent* noteEvent = dynamic_cast<NoteEvent*>(event.get());
+			if (noteEvent) {
+				int nota = noteEvent->getNote(params);
+				nota = std::clamp(nota, 0, 127);
 
-        // eventos
-        for (const auto& event : voice.getEvents()) {
-            event->runEvent(params);
+				pushVarLen(0);
+				track.push_back(0x90 | channel);
+				track.push_back((unsigned char)nota);
+				track.push_back((unsigned char)params.vol.get());
 
-            int nota = 60 + (params.oct.getVal() - 5) * 12;
-            nota = std::clamp(nota, 0, 127);
+				pushVarLen(480);
+				track.push_back(0x80 | channel);
+				track.push_back((unsigned char)nota);
+				track.push_back(0);
+			} else {
+				event->runEvent(params);
+			}
+		}
 
-            // note on — delta time 0 (imediato)
-            pushVarLen(0);
-            track.push_back(0x90 | channel);
-            track.push_back((unsigned char)nota);
-            track.push_back((unsigned char)params.vol.get());
+		// end of track
+		pushVarLen(0);
+		track.push_back(0xFF);
+		track.push_back(0x2F);
+		track.push_back(0x00);
 
-            // note off — delta time de 1 beat (480 ticks)
-            pushVarLen(480);
-            track.push_back(0x80 | channel);
-            track.push_back((unsigned char)nota);
-            track.push_back(0);
-        }
-
-        // end of track
-        pushVarLen(0);
-        track.push_back(0xFF);
-        track.push_back(0x2F);
-        track.push_back(0x00);
-
-        return track;
-    }
+		return track;
+	}
 
 public:
     static void exportToFile(FugueScore& score, const std::string& filename) {
