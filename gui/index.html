@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gerador Musical</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #222536;
+    --border: #2e3248;
+    --accent: #7c6af7;
+    --accent2: #4fd1c5;
+    --text: #e8eaf0;
+    --text2: #8890a8;
+    --v0: #7c6af7;
+    --v1: #4fd1c5;
+    --v2: #f6ad55;
+    --v3: #fc8181;
+    --success: #68d391;
+    --radius: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* TOPBAR */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .topbar-title {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--text);
+  }
+  .topbar-title span { color: var(--accent); }
+  .topbar-buttons { display: flex; gap: 8px; }
+
+  /* BUTTONS */
+  .btn {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 7px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn:hover { background: var(--border); border-color: var(--accent); }
+  .btn.accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.accent:hover { background: #6a58e0; }
+  .btn.danger:hover { border-color: var(--v3); color: var(--v3); }
+  .badge {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 5px;
+    border-radius: 4px;
+    background: var(--accent2);
+    color: #0f1117;
+    letter-spacing: 0.05em;
+  }
+
+  /* MAIN LAYOUT */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* EDITOR */
+  .editor-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .editor-wrap {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+  }
+  .line-numbers {
+    width: 48px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 16px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text2);
+    overflow: hidden;
+    flex-shrink: 0;
+    user-select: none;
+  }
+  .line-number {
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 10px;
+    gap: 6px;
+  }
+  .voice-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .editor-container {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+  }
+  .editor-highlights {
+    position: absolute;
+    top: 0; left: 0;
+    padding: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 24px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    pointer-events: none;
+    color: transparent;
+    width: 100%;
+  }
+  #editor {
+    position: relative;
+    width: 100%;
+    min-height: 100%;
+    padding: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 24px;
+    background: transparent;
+    color: var(--text);
+    border: none;
+    outline: none;
+    resize: none;
+    caret-color: var(--accent);
+    z-index: 1;
+  }
+
+  /* STATUS BAR */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text2);
+    flex-shrink: 0;
+  }
+  .status-left { display: flex; gap: 16px; align-items: center; }
+  .invalid-count { color: var(--v3); }
+  .valid-count { color: var(--success); }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 260px;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    flex-shrink: 0;
+    background: var(--surface);
+  }
+  .sidebar-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--text2);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* BPM */
+  .bpm-display {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    text-align: center;
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+  .bpm-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1;
+  }
+  .bpm-label { font-size: 10px; color: var(--text2); margin-top: 2px; }
+  .bpm-controls { display: flex; gap: 6px; }
+  .bpm-controls .btn { flex: 1; justify-content: center; font-size: 16px; padding: 6px; }
+
+  /* SLIDER */
+  .param-row { margin-bottom: 10px; }
+  .param-header { display: flex; justify-content: space-between; margin-bottom: 6px; }
+  .param-name { font-size: 12px; color: var(--text2); }
+  .param-val { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text); }
+  input[type=range] {
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    outline: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 0 0 3px rgba(124,106,247,0.2);
+  }
+
+  /* VOICE INSTRUMENTS */
+  .voice-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .voice-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    width: 24px;
+    flex-shrink: 0;
+  }
+  select {
+    flex: 1;
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    padding: 6px 8px;
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    outline: none;
+    cursor: pointer;
+  }
+  select:focus { border-color: var(--accent); }
+
+  /* THEMES */
+  .theme-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .theme-btn {
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .theme-btn:hover, .theme-btn.active { border-color: var(--accent); color: var(--accent); }
+
+  /* BOTTOM BAR */
+  .bottom-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .play-btn {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s;
+    font-size: 14px;
+  }
+  .play-btn:hover { background: #6a58e0; transform: scale(1.05); }
+  .stop-btn {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s;
+    font-size: 12px;
+  }
+  .stop-btn:hover { border-color: var(--v3); }
+
+  /* PROGRESS */
+  .progress-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .progress-info {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text2);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .note-badge {
+    background: var(--accent);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .progress-bar-bg {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.3s;
+  }
+  .bottom-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text2); }
+
+  /* THEMES */
+  body.theme-forest {
+    --bg: #0d1a0f;
+    --surface: #122016;
+    --surface2: #1a2e1e;
+    --border: #2a4030;
+    --accent: #4caf50;
+    --accent2: #8bc34a;
+    --text: #e8f5e9;
+    --text2: #7a9e7e;
+  }
+  body.theme-ocean {
+    --bg: #0a1628;
+    --surface: #0d1f3c;
+    --surface2: #132848;
+    --border: #1e3a5f;
+    --accent: #2196f3;
+    --accent2: #00bcd4;
+    --text: #e3f2fd;
+    --text2: #6b9ab8;
+  }
+  body.theme-light {
+    --bg: #f5f6fa;
+    --surface: #ffffff;
+    --surface2: #f0f1f7;
+    --border: #dde0ee;
+    --accent: #7c6af7;
+    --accent2: #4fd1c5;
+    --text: #1a1d27;
+    --text2: #6b7280;
+  }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-title">⟨ Gerador <span>Musical</span> ⟩</div>
+  <div class="topbar-buttons">
+    <button class="btn" onclick="loadFile()">📂 Carregar .txt</button>
+    <button class="btn" onclick="saveFile()">💾 Salvar .txt <span class="badge">novo</span></button>
+    <button class="btn danger" onclick="clearEditor()">🗑 Limpar</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- EDITOR -->
+  <div class="editor-panel">
+    <div class="editor-wrap">
+      <div class="line-numbers" id="lineNumbers"></div>
+      <div class="editor-container">
+        <textarea id="editor" spellcheck="false" placeholder="Digite ou cole o texto aqui...&#10;Cada linha é uma voz independente.&#10;&#10;Exemplo:&#10;[0] C D E F G A&#10;[4] G A H C D E">[0] C D E F G A
+[4] G A H C D E
+[8] E F G A H C
+[12] C D E F , ,</textarea>
+      </div>
+    </div>
+    <div class="status-bar">
+      <div class="status-left">
+        <span class="invalid-count" id="invalidCount">0 caracteres inválidos</span>
+        <span class="valid-count" id="noteCount">0 notas</span>
+        <span id="voiceCount">0 vozes</span>
+      </div>
+      <span id="charCount">0 / 5000</span>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- BPM -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Parâmetros</div>
+      <div class="bpm-display">
+        <div class="bpm-value" id="bpmDisplay">120</div>
+        <div class="bpm-label">BPM</div>
+      </div>
+      <div class="bpm-controls">
+        <button class="btn" onclick="changeBpm(-10)">−10</button>
+        <button class="btn" onclick="changeBpm(-1)">−1</button>
+        <button class="btn" onclick="changeBpm(1)">+1</button>
+        <button class="btn" onclick="changeBpm(10)">+10</button>
+      </div>
+    </div>
+
+    <!-- VOLUME -->
+    <div class="sidebar-section">
+      <div class="param-row">
+        <div class="param-header">
+          <span class="param-name">Volume</span>
+          <span class="param-val" id="volDisplay">64</span>
+        </div>
+        <input type="range" min="0" max="127" value="64" id="volSlider"
+               oninput="document.getElementById('volDisplay').textContent=this.value">
+      </div>
+    </div>
+
+    <!-- VOZES -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Vozes <span class="badge">novo</span></div>
+      <div class="voice-row">
+        <span class="voice-label" style="color:var(--v0)">V0</span>
+        <select id="inst0" onchange="updateInstrument(0)">
+          <option value="6" selected>Cravo (GM 6)</option>
+        </select>
+      </div>
+      <div class="voice-row">
+        <span class="voice-label" style="color:var(--v1)">V1</span>
+        <select id="inst1" onchange="updateInstrument(1)">
+          <option value="20" selected>Órgão (GM 20)</option>
+        </select>
+      </div>
+      <div class="voice-row">
+        <span class="voice-label" style="color:var(--v2)">V2</span>
+        <select id="inst2" onchange="updateInstrument(2)">
+          <option value="0" selected>Piano (GM 0)</option>
+        </select>
+      </div>
+      <div class="voice-row">
+        <span class="voice-label" style="color:var(--v3)">V3</span>
+        <select id="inst3" onchange="updateInstrument(3)">
+          <option value="70" selected>Fagote (GM 70)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- APARÊNCIA -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Aparência</div>
+      <div class="theme-grid">
+        <div class="theme-btn active" onclick="setTheme('')">Padrão</div>
+        <div class="theme-btn" onclick="setTheme('theme-light')">Claro</div>
+        <div class="theme-btn" onclick="setTheme('theme-forest')">Floresta</div>
+        <div class="theme-btn" onclick="setTheme('theme-ocean')">Oceano</div>
+      </div>
+      <button class="btn" style="width:100%;justify-content:center" onclick="setTheme('')">Restaurar padrão</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- BOTTOM BAR -->
+<div class="bottom-bar">
+  <button class="play-btn" onclick="togglePlay()" id="playBtn" title="Tocar">▶</button>
+  <button class="stop-btn" onclick="stopPlay()" title="Parar">⏹</button>
+  <div class="progress-wrap">
+    <div class="progress-info">
+      <span id="progressText">Progresso — aguardando</span>
+      <span class="note-badge" id="noteBadge" style="display:none">A → Lá</span>
+    </div>
+    <div class="progress-bar-bg">
+      <div class="progress-bar-fill" id="progressFill"></div>
+    </div>
+  </div>
+  <div class="bottom-actions">
+    <button class="btn" onclick="exportTxt()">📄 Exportar .txt</button>
+    <button class="btn accent" onclick="exportMid()">🎵 Exportar .mid</button>
+  </div>
+</div>
+
+<!-- INPUT FILE OCULTO -->
+<input type="file" id="fileInput" accept=".txt" style="display:none" onchange="handleFile(event)">
+
+<script>
+const MIDI_NAMES = [
+  "Acoustic Grand Piano","Bright Acoustic Piano","Electric Grand Piano","Honky-tonk Piano",
+  "Electric Piano 1","Electric Piano 2","Harpsichord","Clavi",
+  "Celesta","Glockenspiel","Music Box","Vibraphone","Marimba","Xylophone","Tubular Bells","Dulcimer",
+  "Drawbar Organ","Percussive Organ","Rock Organ","Church Organ","Reed Organ","Accordion","Harmonica","Tango Accordion",
+  "Acoustic Guitar (nylon)","Acoustic Guitar (steel)","Electric Guitar (jazz)","Electric Guitar (clean)",
+  "Electric Guitar (muted)","Overdriven Guitar","Distortion Guitar","Guitar Harmonics",
+  "Acoustic Bass","Electric Bass (finger)","Electric Bass (pick)","Fretless Bass",
+  "Slap Bass 1","Slap Bass 2","Synth Bass 1","Synth Bass 2",
+  "Violin","Viola","Cello","Contrabass","Tremolo Strings","Pizzicato Strings","Orchestral Harp","Timpani",
+  "String Ensemble 1","String Ensemble 2","SynthStrings 1","SynthStrings 2",
+  "Choir Aahs","Voice Oohs","Synth Voice","Orchestra Hit",
+  "Trumpet","Trombone","Tuba","Muted Trumpet","French Horn","Brass Section","SynthBrass 1","SynthBrass 2",
+  "Soprano Sax","Alto Sax","Tenor Sax","Baritone Sax","Oboe","English Horn","Bassoon","Clarinet",
+  "Piccolo","Flute","Recorder","Pan Flute","Blown Bottle","Shakuhachi","Whistle","Ocarina",
+  "Lead 1 (square)","Lead 2 (sawtooth)","Lead 3 (calliope)","Lead 4 (chiff)",
+  "Lead 5 (charang)","Lead 6 (voice)","Lead 7 (fifths)","Lead 8 (bass + lead)",
+  "Pad 1 (new age)","Pad 2 (warm)","Pad 3 (polysynth)","Pad 4 (choir)",
+  "Pad 5 (bowed)","Pad 6 (metallic)","Pad 7 (halo)","Pad 8 (sweep)",
+  "FX 1 (rain)","FX 2 (soundtrack)","FX 3 (crystal)","FX 4 (atmosphere)",
+  "FX 5 (brightness)","FX 6 (goblins)","FX 7 (echoes)","FX 8 (sci-fi)",
+  "Sitar","Banjo","Shamisen","Koto","Kalimba","Bag pipe","Fiddle","Shanai",
+  "Tinkle Bell","Agogo","Steel Drums","Woodblock","Taiko Drum","Melodic Tom","Synth Drum","Reverse Cymbal",
+  "Guitar Fret Noise","Breath Noise","Seashore","Bird Tweet","Telephone Ring","Helicopter","Applause","Gunshot"
+];
+
+const NOTE_MAP = { A:'Lá', B:'Si', C:'Dó', D:'Ré', E:'Mi', F:'Fá', G:'Sol', H:'Si♭' };
+const VOICE_COLORS = ['var(--v0)', 'var(--v1)', 'var(--v2)', 'var(--v3)'];
+const NOTE_CHARS = new Set(['A','B','C','D','E','F','G','H']);
+const VALID_CHARS = new Set([
+  ...NOTE_CHARS, ...'abcdefgh'.split(''),
+  '!',';',',','o','i','u','O','I','U','?','.','V','<','>',' ','[',']',
+  '0','1','2','3','4','5','6','7','8','9','\n'
+]);
+
+let bpm = 120;
+let playing = false;
+let playInterval = null;
+let currentNote = 0;
+let allNotes = [];
+
+// popula selects com 128 instrumentos
+function populateSelects() {
+  const defaults = [6, 20, 0, 70];
+  for (let v = 0; v < 4; v++) {
+    const sel = document.getElementById('inst' + v);
+    sel.innerHTML = '';
+    MIDI_NAMES.forEach((name, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = name + ' (GM ' + i + ')';
+      if (i === defaults[v]) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+}
+
+// atualiza line numbers e status
+function updateEditor() {
+  const text = document.getElementById('editor').value;
+  const lines = text.split('\n');
+  const lineNums = document.getElementById('lineNumbers');
+
+  let html = '';
+  let totalNotes = 0;
+  let totalInvalid = 0;
+
+  lines.forEach((line, i) => {
+    const color = VOICE_COLORS[i % 4];
+    html += `<div class="line-number">
+      <div class="voice-dot" style="background:${color}"></div>
+      V${i}
+    </div>`;
+    // conta notas e inválidos
+    for (const c of line) {
+      if (NOTE_CHARS.has(c)) totalNotes++;
+      if (!VALID_CHARS.has(c)) totalInvalid++;
+    }
+  });
+
+  lineNums.innerHTML = html;
+
+  document.getElementById('invalidCount').textContent =
+    totalInvalid + ' caracteres inválidos';
+  document.getElementById('noteCount').textContent =
+    totalNotes + ' notas';
+  document.getElementById('voiceCount').textContent =
+    lines.length + ' vozes';
+  document.getElementById('charCount').textContent =
+    text.length + ' / 5000';
+
+  // coleta notas para simulação do play
+  allNotes = [];
+  lines.forEach((line, vi) => {
+    // remove delay [n]
+    const clean = line.replace(/^\[\d+\]\s*/, '');
+    for (const c of clean) {
+      if (NOTE_CHARS.has(c)) {
+        allNotes.push({ note: c, voice: vi });
+      }
+    }
+  });
+}
+
+// sincroniza scroll do textarea com line numbers
+document.getElementById('editor').addEventListener('scroll', function() {
+  document.getElementById('lineNumbers').scrollTop = this.scrollTop;
+});
+document.getElementById('editor').addEventListener('input', updateEditor);
+
+// BPM
+function changeBpm(delta) {
+  bpm = Math.max(30, Math.min(240, bpm + delta));
+  document.getElementById('bpmDisplay').textContent = bpm;
+}
+
+// PLAY simulado (visual)
+function togglePlay() {
+  if (playing) { stopPlay(); return; }
+  playing = true;
+  currentNote = 0;
+  document.getElementById('playBtn').textContent = '⏸';
+  document.getElementById('progressText').textContent = 'Tocando...';
+
+  const msPerBeat = 60000 / bpm;
+  playInterval = setInterval(() => {
+    if (currentNote >= allNotes.length) { stopPlay(); return; }
+    const n = allNotes[currentNote];
+    const noteName = NOTE_MAP[n.note] || n.note;
+    const pct = Math.round((currentNote / allNotes.length) * 100);
+
+    document.getElementById('progressText').textContent =
+      `Progresso — V${n.voice}, nota ${currentNote + 1} de ${allNotes.length}`;
+    document.getElementById('noteBadge').style.display = 'inline';
+    document.getElementById('noteBadge').textContent = `${n.note} → ${noteName} (V${n.voice})`;
+    document.getElementById('progressFill').style.width = pct + '%';
+
+    currentNote++;
+  }, msPerBeat);
+}
+
+function stopPlay() {
+  playing = false;
+  clearInterval(playInterval);
+  document.getElementById('playBtn').textContent = '▶';
+  document.getElementById('progressText').textContent = 'Progresso — parado';
+  document.getElementById('noteBadge').style.display = 'none';
+  document.getElementById('progressFill').style.width = '0%';
+}
+
+// FILE I/O
+function loadFile() { document.getElementById('fileInput').click(); }
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    document.getElementById('editor').value = ev.target.result;
+    updateEditor();
+  };
+  reader.readAsText(file);
+}
+
+function saveFile() {
+  const text = document.getElementById('editor').value;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'musica.txt';
+  a.click();
+}
+
+function clearEditor() {
+  document.getElementById('editor').value = '';
+  updateEditor();
+}
+
+function exportTxt() { saveFile(); }
+
+function exportMid() {
+  alert('Exportação MIDI: clique OK e rode o executável chili_pepper com o arquivo de texto gerado.');
+}
+
+function updateInstrument(v) {
+  const val = document.getElementById('inst' + v).value;
+  const name = MIDI_NAMES[val];
+  console.log(`Voz ${v}: instrumento ${val} (${name})`);
+}
+
+// THEMES
+function setTheme(cls) {
+  document.body.className = cls;
+  document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+// INIT
+populateSelects();
+updateEditor();
+</script>
+</body>
+</html>

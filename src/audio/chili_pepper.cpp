@@ -559,9 +559,44 @@ public:
 };
 
 int main() {
-    std::string texto = "[0] CDEF\n[4] GABC";
+    std::cout << "=== Gerador Musical ===" << std::endl;
+    std::cout << "Digite o texto (linha vazia para terminar):" << std::endl;
+    std::cout << "Use [n] no inicio de cada linha para delay." << std::endl;
+    std::cout << "Notas: A=La B=Si C=Do D=Re E=Mi F=Fa G=Sol H=SiBemol" << std::endl;
+    std::cout << "--------------------------------------" << std::endl;
+
+    std::string texto = "";
+    std::string linha;
+
+    while (true) {
+        std::getline(std::cin, linha);
+        if (linha.empty()) break;
+        texto += linha + "\n";
+    }
+
+    if (texto.empty()) {
+        std::cout << "Nenhum texto inserido." << std::endl;
+        return 0;
+    }
+
+    std::cout << "\nProcessando " << std::count(texto.begin(), texto.end(), '\n') << " vozes..." << std::endl;
+
     FugueScore score = FugueScore::fromText(texto);
+
+    std::cout << "Tocando..." << std::endl;
     score.play();
-    MidiExporter::exportToFile(score, "output.mid");
+
+    std::cout << "\nSalvar arquivo MIDI? (s/n): ";
+    char resp;
+    std::cin >> resp;
+    if (resp == 's' || resp == 'S') {
+        std::cout << "Nome do arquivo (sem extensao): ";
+        std::string nome;
+        std::cin >> nome;
+        MidiExporter::exportToFile(score, nome + ".mid");
+        std::cout << "Arquivo " << nome << ".mid salvo!" << std::endl;
+    }
+
+    std::cout << "Fim." << std::endl;
     return 0;
 }
