@@ -586,20 +586,64 @@ public:
     }
 };
 
+class FileManager {
+public:
+    static std::string loadText(const std::string& filename) {
+        std::ifstream f(filename);
+        if (!f.is_open())
+            throw std::runtime_error("Nao foi possivel abrir o arquivo: " + filename);
+        std::string content((std::istreambuf_iterator<char>(f)),
+                             std::istreambuf_iterator<char>());
+        f.close();
+        return content;
+    }
+
+    static void saveText(const std::string& filename, const std::string& content) {
+        std::ofstream f(filename);
+        if (!f.is_open())
+            throw std::runtime_error("Nao foi possivel salvar o arquivo: " + filename);
+        f << content;
+        f.close();
+    }
+};
+
 int main() {
     std::cout << "=== Gerador Musical ===" << std::endl;
-    std::cout << "Digite o texto (linha vazia para terminar):" << std::endl;
-    std::cout << "Use [n] no inicio de cada linha para delay." << std::endl;
     std::cout << "Notas: A=La B=Si C=Do D=Re E=Mi F=Fa G=Sol H=SiBemol" << std::endl;
     std::cout << "--------------------------------------" << std::endl;
+    std::cout << "1 - Digitar texto" << std::endl;
+    std::cout << "2 - Carregar arquivo .txt" << std::endl;
+    std::cout << "Opcao: ";
+
+    int opcao;
+    std::cin >> opcao;
+    std::cin.ignore();
 
     std::string texto = "";
-    std::string linha;
 
-    while (true) {
-        std::getline(std::cin, linha);
-        if (linha.empty()) break;
-        texto += linha + "\n";
+    if (opcao == 1) {
+        std::cout << "Digite o texto (linha vazia para terminar):" << std::endl;
+        std::cout << "Use [n] no inicio de cada linha para delay." << std::endl;
+        std::string linha;
+        while (true) {
+            std::getline(std::cin, linha);
+            if (linha.empty()) break;
+            texto += linha + "\n";
+        }
+    } else if (opcao == 2) {
+        std::cout << "Nome do arquivo (com extensao .txt): ";
+        std::string filename;
+        std::getline(std::cin, filename);
+        try {
+            texto = FileManager::loadText(filename);
+            std::cout << "Arquivo carregado!" << std::endl;
+        } catch (const std::exception& e) {
+            std::cout << "Erro: " << e.what() << std::endl;
+            return 1;
+        }
+    } else {
+        std::cout << "Opcao invalida." << std::endl;
+        return 1;
     }
 
     if (texto.empty()) {
@@ -614,15 +658,30 @@ int main() {
     std::cout << "Tocando..." << std::endl;
     score.play();
 
-    std::cout << "\nSalvar arquivo MIDI? (s/n): ";
-    char resp;
-    std::cin >> resp;
-    if (resp == 's' || resp == 'S') {
-        std::cout << "Nome do arquivo (sem extensao): ";
+    std::cout << "\n1 - Salvar MIDI" << std::endl;
+    std::cout << "2 - Salvar texto" << std::endl;
+    std::cout << "3 - Ambos" << std::endl;
+    std::cout << "4 - Sair" << std::endl;
+    std::cout << "Opcao: ";
+
+    int opcaoSalvar;
+    std::cin >> opcaoSalvar;
+    std::cin.ignore();
+
+    if (opcaoSalvar == 1 || opcaoSalvar == 3) {
+        std::cout << "Nome do arquivo MIDI (sem extensao): ";
         std::string nome;
-        std::cin >> nome;
+        std::getline(std::cin, nome);
         MidiExporter::exportToFile(score, nome + ".mid");
         std::cout << "Arquivo " << nome << ".mid salvo!" << std::endl;
+    }
+
+    if (opcaoSalvar == 2 || opcaoSalvar == 3) {
+        std::cout << "Nome do arquivo texto (sem extensao): ";
+        std::string nome;
+        std::getline(std::cin, nome);
+        FileManager::saveText(nome + ".txt", texto);
+        std::cout << "Arquivo " << nome << ".txt salvo!" << std::endl;
     }
 
     std::cout << "Fim." << std::endl;
