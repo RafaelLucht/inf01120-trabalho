@@ -559,9 +559,9 @@ public:
 };
 
 int main() {
-	// teste básico
-	std::string texto = "[0] CDEF\n[4] GABC";
-	FugueScore score = FugueScore::fromText(texto);
-	score.play();
-	return 0;
+    std::string texto = "[0] CDEF\n[4] GABC";
+    FugueScore score = FugueScore::fromText(texto);
+    score.play();
+    MidiExporter::exportToFile(score, "output.mid");
+    return 0;
 }
