@@ -8,6 +8,7 @@
 #include "RtMidi.h"
 #include <thread>
 #include <chrono>
+#include <fstream>
 
 
 class AudioVolume {
@@ -442,21 +443,119 @@ public:
 };
 
 class MidiExporter {
-public:
-	// TODO: implementar após escolha da biblioteca MIDI
-	static void exportToFile(FugueScore& score, const std::string& filename) {
-		// para cada voz em score.getVoices():
-		//   criar trilha MIDI no canal correspondente
-		//   aplicar delay inicial em beats
-		//   converter eventos em mensagens MIDI
-		// salvar arquivo filename.mid
-	}
-
 private:
-	static void voiceToMidiTrack(const Voice& voice, int channel) {
-		// converter voice.getEvents() em mensagens MIDI
-		// canal MIDI = voice.getVoiceIndex() % 16
-	}
+    // escreve um inteiro de 4 bytes em big-endian no arquivo
+    static void writeInt32(std::ofstream& f, uint32_t val) {
+        f.put((val >> 24) & 0xFF);
+        f.put((val >> 16) & 0xFF);
+        f.put((val >>  8) & 0xFF);
+        f.put((val >>  0) & 0xFF);
+    }
+
+    // escreve um inteiro de 2 bytes em big-endian no arquivo
+    static void writeInt16(std::ofstream& f, uint16_t val) {
+        f.put((val >> 8) & 0xFF);
+        f.put((val >> 0) & 0xFF);
+    }
+
+    // escreve um número em formato variable-length (padrão MIDI para delta time)
+    static void writeVarLen(std::ofstream& f, uint32_t val) {
+        if (val < 128) {
+            f.put(val);
+        } else if (val < 16384) {
+            f.put((val >> 7) | 0x80);
+            f.put(val & 0x7F);
+        } else {
+            f.put((val >> 14) | 0x80);
+            f.put(((val >> 7) & 0x7F) | 0x80);
+            f.put(val & 0x7F);
+        }
+    }
+
+    // gera os bytes de uma trilha MIDI a partir de uma Voice
+    static std::vector<unsigned char> buildTrack(const Voice& voice, float beatDuration) {
+        std::vector<unsigned char> track;
+        int channel = voice.getVoiceIndex() % 16;
+        AudioParameters params = voice.getParams();
+
+        // delay inicial em ticks (1 tick = 1 beat aqui)
+        uint32_t delayTicks = voice.getDelay();
+
+        // program change — define instrumento
+        auto pushVarLen = [&](uint32_t val) {
+            if (val < 128) {
+                track.push_back(val);
+            } else if (val < 16384) {
+                track.push_back((val >> 7) | 0x80);
+                track.push_back(val & 0x7F);
+            } else {
+                track.push_back((val >> 14) | 0x80);
+                track.push_back(((val >> 7) & 0x7F) | 0x80);
+                track.push_back(val & 0x7F);
+            }
+        };
+
+        // delta time do delay
+        pushVarLen(delayTicks);
+        track.push_back(0xC0 | channel); // program change
+        track.push_back(params.inst.getVal());
+
+        // eventos
+        for (const auto& event : voice.getEvents()) {
+            event->runEvent(params);
+
+            int nota = 60 + (params.oct.getVal() - 5) * 12;
+            nota = std::clamp(nota, 0, 127);
+
+            // note on — delta time 0 (imediato)
+            pushVarLen(0);
+            track.push_back(0x90 | channel);
+            track.push_back((unsigned char)nota);
+            track.push_back((unsigned char)params.vol.get());
+
+            // note off — delta time de 1 beat (480 ticks)
+            pushVarLen(480);
+            track.push_back(0x80 | channel);
+            track.push_back((unsigned char)nota);
+            track.push_back(0);
+        }
+
+        // end of track
+        pushVarLen(0);
+        track.push_back(0xFF);
+        track.push_back(0x2F);
+        track.push_back(0x00);
+
+        return track;
+    }
+
+public:
+    static void exportToFile(FugueScore& score, const std::string& filename) {
+        std::ofstream f(filename, std::ios::binary);
+        if (!f.is_open())
+            throw std::runtime_error("Nao foi possivel abrir o arquivo: " + filename);
+
+        int numTracks = score.getVoiceCount();
+        float beatDuration = 60000.0f / score.getBpm().get();
+
+        // header chunk
+        f.write("MThd", 4);        // identificador
+        writeInt32(f, 6);          // tamanho do header sempre 6
+        writeInt16(f, 1);          // formato 1 = múltiplas trilhas simultâneas
+        writeInt16(f, numTracks);  // número de trilhas
+        writeInt16(f, 480);        // 480 ticks por beat
+
+        // uma trilha por voz
+        for (const Voice& voice : score.getVoices()) {
+            std::vector<unsigned char> track = buildTrack(voice, beatDuration);
+
+            f.write("MTrk", 4);
+            writeInt32(f, track.size());
+            f.write((char*)track.data(), track.size());
+        }
+
+        f.close();
+    }
 };
 
 int main() {
