@@ -274,14 +274,14 @@ public:
 
 class NoteEvent : public AudioEvent {
 private:
-    int baseNote; // nota MIDI base (oitava 5)
+    int baseNote;
 public:
     explicit NoteEvent(int baseNote) : baseNote(baseNote) {}
+    NoteEvent(const NoteEvent& other) : baseNote(other.baseNote) {}
 
-    void runEvent(AudioParameters& params) override {
-        // NoteEvent não muda params — só marca que há uma nota
-        // a nota real é calculada pelo play() considerando a oitava atual
-    }
+    void runEvent(AudioParameters& params) override {}
+
+    int getBaseNote() const { return baseNote; } // ← adiciona esse getter
 
     int getNote(const AudioParameters& params) const {
         int nota = baseNote + (params.oct.getVal() - 5) * 12;
@@ -390,10 +390,21 @@ private:
 		std::string linecopy = line;
 		int delay = parseDelay(linecopy);
 		voice.setDelay(delay);
+
+		NoteEvent* lastNote = nullptr; // última nota tocada
+
+		int lastBaseNote = -1; // -1 = nenhuma nota ainda
+
 		for (char c : linecopy) {
 			auto event = EventMapper::triggerEvent(c);
-			if (event != nullptr)
+			if (event != nullptr) {
+				NoteEvent* noteEvent = dynamic_cast<NoteEvent*>(event.get());
+				if (noteEvent) lastBaseNote = noteEvent->getBaseNote();
 				voice.addEvent(std::move(event));
+			} else {
+				if (lastBaseNote >= 0)
+					voice.addEvent(std::make_unique<NoteEvent>(lastBaseNote));
+			}
 		}
 		return voice;
 	}
@@ -658,30 +669,48 @@ int main() {
     std::cout << "Tocando..." << std::endl;
     score.play();
 
-    std::cout << "\n1 - Salvar MIDI" << std::endl;
-    std::cout << "2 - Salvar texto" << std::endl;
-    std::cout << "3 - Ambos" << std::endl;
-    std::cout << "4 - Sair" << std::endl;
-    std::cout << "Opcao: ";
+    while (true) {
+        std::cout << "\n1 - Escutar novamente" << std::endl;
+        std::cout << "2 - Salvar MIDI" << std::endl;
+        std::cout << "3 - Salvar texto" << std::endl;
+        std::cout << "4 - Salvar ambos" << std::endl;
+        std::cout << "5 - Sair" << std::endl;
+        std::cout << "Opcao: ";
 
-    int opcaoSalvar;
-    std::cin >> opcaoSalvar;
-    std::cin.ignore();
+        int opcaoSalvar;
+        std::cin >> opcaoSalvar;
+        std::cin.ignore();
 
-    if (opcaoSalvar == 1 || opcaoSalvar == 3) {
-        std::cout << "Nome do arquivo MIDI (sem extensao): ";
-        std::string nome;
-        std::getline(std::cin, nome);
-        MidiExporter::exportToFile(score, nome + ".mid");
-        std::cout << "Arquivo " << nome << ".mid salvo!" << std::endl;
-    }
-
-    if (opcaoSalvar == 2 || opcaoSalvar == 3) {
-        std::cout << "Nome do arquivo texto (sem extensao): ";
-        std::string nome;
-        std::getline(std::cin, nome);
-        FileManager::saveText(nome + ".txt", texto);
-        std::cout << "Arquivo " << nome << ".txt salvo!" << std::endl;
+        if (opcaoSalvar == 1) {
+            std::cout << "Tocando novamente..." << std::endl;
+            score.play();
+        } else if (opcaoSalvar == 2) {
+            std::cout << "Nome do arquivo MIDI (sem extensao): ";
+            std::string nome;
+            std::getline(std::cin, nome);
+            MidiExporter::exportToFile(score, nome + ".mid");
+            std::cout << "Arquivo " << nome << ".mid salvo!" << std::endl;
+        } else if (opcaoSalvar == 3) {
+            std::cout << "Nome do arquivo texto (sem extensao): ";
+            std::string nome;
+            std::getline(std::cin, nome);
+            FileManager::saveText(nome + ".txt", texto);
+            std::cout << "Arquivo " << nome << ".txt salvo!" << std::endl;
+        } else if (opcaoSalvar == 4) {
+            std::cout << "Nome do arquivo MIDI (sem extensao): ";
+            std::string nomeMidi;
+            std::getline(std::cin, nomeMidi);
+            MidiExporter::exportToFile(score, nomeMidi + ".mid");
+            std::cout << "Nome do arquivo texto (sem extensao): ";
+            std::string nomeTxt;
+            std::getline(std::cin, nomeTxt);
+            FileManager::saveText(nomeTxt + ".txt", texto);
+            std::cout << "Arquivos salvos!" << std::endl;
+        } else if (opcaoSalvar == 5) {
+            break;
+        } else {
+            std::cout << "Opcao invalida." << std::endl;
+        }
     }
 
     std::cout << "Fim." << std::endl;
