@@ -391,11 +391,19 @@ private:
 		int delay = parseDelay(linecopy);
 		voice.setDelay(delay);
 
-		NoteEvent* lastNote = nullptr; // última nota tocada
+		int lastBaseNote = -1;
 
-		int lastBaseNote = -1; // -1 = nenhuma nota ainda
+		for (int i = 0; i < (int)linecopy.size(); i++) {
+			char c = linecopy[i];
 
-		for (char c : linecopy) {
+			// verifica Mi bemol (Mb)
+			if (c == 'M' && i + 1 < (int)linecopy.size() && linecopy[i + 1] == 'b') {
+				voice.addEvent(std::make_unique<NoteEvent>(63)); // Mi bemol
+				lastBaseNote = 63;
+				i++; // pula o 'b'
+				continue;
+			}
+
 			auto event = EventMapper::triggerEvent(c);
 			if (event != nullptr) {
 				NoteEvent* noteEvent = dynamic_cast<NoteEvent*>(event.get());
