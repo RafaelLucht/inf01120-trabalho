@@ -1,3 +1,5 @@
+#include "RtMidi.h"
+
 #include <iostream>
 #include <string>
 #include <stdexcept>
@@ -5,8 +7,8 @@
 #include <algorithm>
 #include <memory>
 #include <vector>
-#include "RtMidi.h"
 #include <thread>
+#include <mutex>
 #include <chrono>
 #include <fstream>
 
@@ -21,6 +23,7 @@ private:
 	bool muted = false;
 	short vol = defaultVolume;
 public:
+	AudioVolume() = default;
 	explicit AudioVolume(short defaultVolume) :
 		defaultVolume(defaultVolume) {}
 	void set(short vol) {
@@ -69,7 +72,7 @@ private:
 	static constexpr short MIN_MIDI_VAL = 0;
 	static constexpr short MAX_MIDI_VAL = 127;
 
-	short defaultMidiVal = 0;
+	short defaultMidiVal = 6;
 
 	static constexpr std::array<const char*, 128> MIDI_NAMES = {
 		//Piano
@@ -133,7 +136,8 @@ private:
 	MIDI_Instrument inst = {defaultMidiVal, nameMIDI(defaultMidiVal)};
 
 public:
-	explicit AudioInstrument(short defaultMidiVal = 0) :
+	AudioInstrument() = default;
+	explicit AudioInstrument(short defaultMidiVal) :
 		defaultMidiVal(defaultMidiVal) {}
 	void set(short midi_val) {
 		if (midi_val < MIN_MIDI_VAL || midi_val > MAX_MIDI_VAL)
@@ -178,6 +182,7 @@ private:
 	Octave oct = {defaultOctave, nameOct(defaultOctave)};
 
 public:
+	AudioOctave() = default;
 	explicit AudioOctave(short defaultOctave) :
 		defaultOctave(defaultOctave) {}
 	void set(short oct_val) {
@@ -205,8 +210,7 @@ public:
 	AudioInstrument inst;
 	AudioOctave oct;
 
-	// corrigido: passa defaultMidiVal=0 para inst
-	AudioParameters() : vol(100), inst(0), oct(6) {}
+	AudioParameters() = default;
 
 	void resetToDefaultAll() {
 		vol.resetToDefault();
@@ -245,7 +249,6 @@ private:
 public:
 	explicit OctaveChangeEvent(short octShift) : octShift(octShift) {}
 	void runEvent(AudioParameters &params) override {
-		// TODO: discutir com Johann — resetar vs clampar quando sai do range
 		short oct = params.oct.getVal() + octShift;
 		if (oct > params.oct.getMax() || oct < params.oct.getMin())
 			params.oct.resetToDefault();
@@ -266,7 +269,6 @@ public:
 
 class VolumeChangeEvent : public AudioEvent {
 public:
-	// TODO: discutir com Johann — vol*2 fixo vs shift configurável
 	void runEvent(AudioParameters &params) override {
 		params.vol.setClamped(params.vol.get() * 2);
 	}
@@ -281,7 +283,7 @@ public:
 
     void runEvent(AudioParameters& params) override {}
 
-    int getBaseNote() const { return baseNote; } // ← adiciona esse getter
+    int getBaseNote() const { return baseNote; }
 
     int getNote(const AudioParameters& params) const {
         int nota = baseNote + (params.oct.getVal() - 5) * 12;
@@ -296,21 +298,34 @@ private:
 	}
 public:
 	static std::unique_ptr<AudioEvent> triggerEvent(char eventKey) {
+		
+		// --- Muda instrumento (valor relativo) ---
 		if (isAnEvenDigit(eventKey))
 			return std::make_unique<InstrumentChangeEvent>(eventKey - '0', InstrumentChangeEvent::ChangeMode::RELATIVE);
+			
+			
 		switch (eventKey) {
+			// --- Muda instrumento (valor absoluto) ---
 			case '!': return std::make_unique<InstrumentChangeEvent>(24);
 			case ';': return std::make_unique<InstrumentChangeEvent>(15);
 			case ',': return std::make_unique<InstrumentChangeEvent>(114);
 			case 'o':
 			case 'i':
 			case 'u': return std::make_unique<InstrumentChangeEvent>(110);
+			
+			// --- Aritmética na oitava ---
 			case '?':
 			case '.': return std::make_unique<OctaveChangeEvent>(1);
 			case 'V': return std::make_unique<OctaveChangeEvent>(-1);
+			
+			// --- Aritmética na BPM ---
 			case '<': return std::make_unique<BpmChangeEvent>(-10);
 			case '>': return std::make_unique<BpmChangeEvent>(10);
+			
+			// --- Dobra volume (limitado superiormente) ---
 			case ' ': return std::make_unique<VolumeChangeEvent>();
+			
+			// --- Notas musicais (*Mi Bemol na sobrecarga com string*) ---
 			case 'A': return std::make_unique<NoteEvent>(69); // Lá
 			case 'B': return std::make_unique<NoteEvent>(71); // Si
 			case 'C': return std::make_unique<NoteEvent>(60); // Dó
@@ -320,7 +335,21 @@ public:
 			case 'G': return std::make_unique<NoteEvent>(67); // Sol
 			case 'H': return std::make_unique<NoteEvent>(70); // Si bemol
 		}
-		return nullptr; // corrigido: evita comportamento indefinido
+		return nullptr; // Evento não mapeado diretamente
+	}
+	// --- Nova sobrecarga para string ---
+	static std::unique_ptr<AudioEvent> triggerEvent(const std::string &eventKey) {
+		
+		// --- Rede de segurança ---
+		if (eventKey.empty())
+			return nullptr;
+		
+		if (eventKey == "Mb")
+			return std::make_unique<NoteEvent>(63);
+			
+		return nullptr;
+		
+		
 	}
 };
 
@@ -337,23 +366,28 @@ private:
 
 public:
 	explicit Voice(int voiceIndex) :
-		voiceIndex(voiceIndex), delay(0), params()
-	{
+		voiceIndex(voiceIndex), delay(0), params()	{
 		int idx = voiceIndex % 4;
 		params.oct.set(BASE_OCTAVES[idx]);
 		params.vol.set(BASE_VOLUMES[idx]);
 		params.inst.set(BASE_INSTRUMENTS[idx]);
 	}
 
-	void setDelay(int n) { delay = n; }
+	void setDelay(int n)	{
+		delay = n;
+	}
 	void addEvent(std::unique_ptr<AudioEvent> event) {
 		events.push_back(std::move(event));
 	}
-
-	// corrigido: getters marcados como const
-	int getDelay()                    const { return delay; }
-	int getVoiceIndex()               const { return voiceIndex; }
-	const AudioParameters& getParams() const { return params; }
+	int getDelay() const	{
+		return delay;
+	}
+	int getVoiceIndex() const	{
+		return voiceIndex;
+	}
+	const AudioParameters& getParams() const	{
+		return params;
+	}
 	const std::vector<std::unique_ptr<AudioEvent>>& getEvents() const {
 		return events;
 	}
@@ -392,26 +426,27 @@ private:
 		voice.setDelay(delay);
 
 		int lastBaseNote = -1;
-
+		std::unique_ptr<AudioEvent> event;
+		
 		for (int i = 0; i < (int)linecopy.size(); i++) {
 			char c = linecopy[i];
 
-			// verifica Mi bemol (Mb)
+			// --- Lida com a possível string primeiro ---
 			if (c == 'M' && i + 1 < (int)linecopy.size() && linecopy[i + 1] == 'b') {
-				voice.addEvent(std::make_unique<NoteEvent>(63)); // Mi bemol
-				lastBaseNote = 63;
-				i++; // pula o 'b'
-				continue;
+				event = EventMapper::triggerEvent("Mb");
+				i++; // Pula o 'b'
 			}
-
-			auto event = EventMapper::triggerEvent(c);
+			
+			else	{
+				event = EventMapper::triggerEvent(c);
+			}
 			if (event != nullptr) {
 				NoteEvent* noteEvent = dynamic_cast<NoteEvent*>(event.get());
 				if (noteEvent) lastBaseNote = noteEvent->getBaseNote();
 				voice.addEvent(std::move(event));
-			} else {
-				if (lastBaseNote >= 0)
-					voice.addEvent(std::make_unique<NoteEvent>(lastBaseNote));
+			}
+			else if (lastBaseNote >= 0)	{
+				voice.addEvent(std::make_unique<NoteEvent>(lastBaseNote));
 			}
 		}
 		return voice;
@@ -445,43 +480,93 @@ public:
 		RtMidiOut midi;
 		midi.openPort(0);
 
-		for (const Voice& voice : voices) {
-			float beatDuration = 60000.0f / bpm.get();
-			std::this_thread::sleep_for(
-				std::chrono::milliseconds((int)(voice.getDelay() * beatDuration))
-			);
-
+		// --- Threads para as vozes; mutex para previnir conflito de dados ---
+		std::vector<std::thread> threads;
+		std::mutex midiMutex;
+		
+		// --- Cada voz em sua thread reproduz som com essa função helper ---
+		auto playVoice = [&](const Voice& voice) {
+			
+			// --- Inicializa parâmetros de voz ---
 			AudioParameters params = voice.getParams();
 			int channel = voice.getVoiceIndex() % 16;
-
-			for (const auto& event : voice.getEvents()) {
+	        float beatDuration = 60000.0f / params.bpm.get();
+		
+			// --- Inicializa vetores MIDI ---
+			std::vector<unsigned char> progChange =	{
+				(unsigned char)(192 + channel),
+				(unsigned char)params.inst.getVal()
+			};
+			std::vector<unsigned char> noteOn =	{
+				(unsigned char)(144 + channel),
+				0, (unsigned char)params.vol.get()
+			};
+			std::vector<unsigned char> noteOff =	{
+				(unsigned char)(128 + channel),
+				0, 0 
+			};
+			
+			// --- Atraso inicial da voz ---
+	        if (voice.getDelay() > 0)
+	            std::this_thread::sleep_for(std::chrono::milliseconds((int)(voice.getDelay() * beatDuration)));
+	            
+			// --- Configura instrumento inicial; fluxo de dados da thread protegido por mutex ---
+			{
+				std::lock_guard<std::mutex> lock(midiMutex);
+				midi.sendMessage(&progChange);
+			}
+			
+			
+			// --- Loop de áudio da voz ---
+			for (const auto &event : voice.getEvents()) {
 				NoteEvent* noteEvent = dynamic_cast<NoteEvent*>(event.get());
-
 				if (noteEvent) {
-					// recalcula beatDuration com BPM atual
-					float beatDuration = 60000.0f / params.bpm.get();
-
-					// atualiza instrumento no canal antes de tocar
-					std::vector<unsigned char> progChange = {
-						(unsigned char)(192 + channel),
-						(unsigned char)params.inst.getVal()
-					};
-					midi.sendMessage(&progChange);
-
-					int nota = noteEvent->getNote(params);
-					std::vector<unsigned char> noteOn  = {(unsigned char)(144 + channel), (unsigned char)nota, (unsigned char)params.vol.get()};
-					std::vector<unsigned char> noteOff = {(unsigned char)(128 + channel), (unsigned char)nota, 0};
-
-					midi.sendMessage(&noteOn);
+					
+					noteOn[1] = (unsigned char)noteEvent->getNote(params);
+					noteOff[1] = noteOn[1];
+					
+					// --- Inicia reprodução da nota ---
+					{
+						std::lock_guard<std::mutex> lock(midiMutex);
+						midi.sendMessage(&noteOn);
+					}
+					
+					// --- Espera pela duração da nota ---
 					std::this_thread::sleep_for(std::chrono::milliseconds((int)beatDuration));
-					midi.sendMessage(&noteOff);
-				} else {
+					
+					// --- Desativa reprodução da nota ---
+					{
+                    std::lock_guard<std::mutex> lock(midiMutex);
+                    midi.sendMessage(&noteOff);
+					}
+				}
+				else {
+					// --- Evento diferente de nota; altera parâmetros ---
 					event->runEvent(params);
+					
+					// --- Atualiza parâmetros, caso tenham mudado ---
+					progChange[1] = (unsigned char)params.inst.getVal();
+					{
+		                std::lock_guard<std::mutex> lock(midiMutex);
+		                midi.sendMessage(&progChange);
+		            }
+					beatDuration = 60000.0f / params.bpm.get();
+					noteOn[2]  = (unsigned char)params.vol.get();
 				}
 			}
+		};
+		// --- Dispara as threads de vozes ---
+	    for (const Voice &voice : voices) {
+	        threads.emplace_back(playVoice, std::ref(voice));
+	    }
+	    
+	    // --- Espera todas threads terminarem antes de sair---
+	    for (std::thread& t : threads) {
+	        if (t.joinable()) {
+	            t.join();
+	        }
 		}
 	}
-
 	static FugueScore fromText(const std::string& text) {
 		FugueScore score;
 		std::vector<Voice> voices = VoiceParser::parse(text);
