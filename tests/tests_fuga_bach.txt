@@ -1,0 +1,3 @@
+[0] G A H C D E F G
+[4] D E F G A B H C
+[8] A B H C D E F G

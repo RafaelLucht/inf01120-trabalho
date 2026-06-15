@@ -1,0 +1,4 @@
+[0] C D E F G A
+[3] E F G A B H
+[6] G A B H C D
+[9] B H C D E F
