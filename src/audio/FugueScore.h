@@ -18,7 +18,7 @@ public:
     FugueScore() = default;
 
     void addVoice(Voice voice) { voices.push_back(std::move(voice)); }
-    AudioBPM& getBpm() { return bpm; }
+    const AudioBPM& getBpm() const { return bpm; }
     const std::vector<Voice>& getVoices() const { return voices; }
     int getVoiceCount() const { return voices.size(); }
 

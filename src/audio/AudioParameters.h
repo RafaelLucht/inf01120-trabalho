@@ -155,7 +155,7 @@ public:
     short getVal() const { return oct.oct_val; }
     short getMin() const { return MIN_OCTAVE; }
     short getMax() const { return MAX_OCTAVE; }
-    std::string getName() { return oct.oct_name; }
+    std::string getName() const { return oct.oct_name; }
     void resetToDefault() { set(defaultOctave); }
 };
 
