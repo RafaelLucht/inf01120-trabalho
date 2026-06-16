@@ -79,13 +79,30 @@ namespace UI {
 	        ImGui::Text("Input text here");
 	        ImGui::SameLine();
 	        
-	        // --- Import .txt ---
+	        // --- Botão Import .txt ---
 	        ImGui::BeginDisabled(state == AppState::PLAYING_MUSIC);
 	        if (ImGui::Button("Import from .txt"))	{
 				txtFilenameBuffer = {};
 				ImGui::OpenPopup("Import txt");
 			}
 	        ImGui::EndDisabled();
+	        ImGui::SameLine();
+	        // --- Botão Export .txt ---
+		    ImGui::BeginDisabled(textBuffer[0] == '\0');
+		    if (ImGui::Button("Export to .txt"))    {
+		        ImGui::OpenPopup("Export txt"); 
+		    }
+		    ImGui::EndDisabled();
+		    ImGui::SameLine();
+		    // --- Clear text ---
+		    ImGui::BeginDisabled(textBuffer[0] == '\0');
+		    if (ImGui::Button("Clear text"))	{
+				textBuffer = {};
+			}
+			ImGui::EndDisabled();
+			ImGui::SameLine();
+		    
+		    // --- Import .txt ---
 			if (ImGui::BeginPopupModal("Import txt", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 				
 			    ImGui::Text("Enter the text filename to load:");
@@ -101,6 +118,7 @@ namespace UI {
 			    
 			    ImGui::SameLine();
 			    
+			    // --- Trata erros ---
 			    if (ImGui::Button("OK", ImVec2(120, 0))) {
 				    try {
 						std::string fullPath = txtFilenameBuffer.data();
@@ -142,7 +160,53 @@ namespace UI {
 		        ImGui::EndPopup();
 		    }
 			
-			ImGui::SameLine();
+			if (ImGui::BeginPopupModal("Export txt", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+				
+				ImGui::Text("Enter the text filename to export:");
+			    ImGui::InputTextWithHint("##filename", "my_fugue.txt", txtFilenameBuffer.data(), txtFilenameBuffer.size());
+			    
+			    ImGui::Spacing();
+			    ImGui::Separator();
+			    ImGui::Spacing();
+			    
+			    if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+			        ImGui::CloseCurrentPopup();
+			    }
+			    
+			    ImGui::SameLine();
+			    
+			    if (ImGui::Button("OK", ImVec2(120, 0))) {
+				    try {
+						std::string fullPath = txtFilenameBuffer.data();
+		                
+		                if (fullPath.find(".txt") == std::string::npos)
+		                    fullPath += ".txt";
+						
+				        FileManager::saveText(fullPath, textBuffer.data());
+				        ImGui::CloseCurrentPopup();
+				    }
+				    catch (const std::exception &e) {
+						ImGui::CloseCurrentPopup();
+				        txtFileErrorMessage = e.what();
+				        ImGui::OpenPopup("Could not open file");
+				    }
+				}
+				ImGui::EndPopup();
+			}
+			if (ImGui::BeginPopup("Could not open file")) {
+		        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Error:");
+		        ImGui::TextWrapped("%s", txtFileErrorMessage.c_str());
+		        
+		        ImGui::Spacing();
+		        ImGui::Separator();
+		        ImGui::Spacing();
+		        
+		        if (ImGui::Button("Close", ImVec2(120, 0))) {
+		            ImGui::CloseCurrentPopup();
+		        }
+		        
+		        ImGui::EndPopup();
+		    }
 			
 			ImGui::BeginDisabled(state == AppState::PLAYING_MUSIC || textBuffer[0] == '\0');
 			
@@ -205,14 +269,7 @@ namespace UI {
 			        }
 		            
 		            ImGui::Spacing();
-		            ImGui::Separator();
-		            ImGui::Spacing();
 		            
-					// --- Reset da voz ---
-		            //~ std::string resetBtnId = "Reset voice parameters to default##" + std::to_string(i);
-		            //~ if (ImGui::Button(resetBtnId.c_str())) {
-		                //~ voices[i].getParams().resetToDefaultAll(); 
-		            //~ }
 		            
 		            ImGui::Unindent();
 		            ImGui::Spacing();
@@ -266,6 +323,7 @@ namespace UI {
 				ImGui::OpenPopup("Export MIDI");
 			}
 	        ImGui::EndDisabled();
+	        
 	        
 	        if (ImGui::BeginPopupModal("Export MIDI", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 		        ImGui::Text("Enter the filename to export:");

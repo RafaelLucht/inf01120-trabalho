@@ -30,6 +30,12 @@ void Voice::addEvent(std::unique_ptr<AudioEvent> event) {
 void Voice::setVolume(short vol)	{
 	params.vol.set(vol);
 }
+void Voice::resetParams()	{
+	auto idx = getVoiceIndex() % 4;
+	params.inst.set(BASE_INSTRUMENTS[idx]);
+	params.oct.set(BASE_OCTAVES[idx]);
+	params.vol.set(BASE_VOLUMES[idx]);
+}
 int Voice::getDelay() const	{
 	return delay;
 }
@@ -150,6 +156,10 @@ void FugueScore::play() {
 
 void FugueScore::updateVoiceVolume(int voiceIndex, short newVolume)	{
 	voices[voiceIndex].setVolume(newVolume);
+}
+
+void FugueScore::resetVoice(int voiceIndex)	{
+	voices[voiceIndex].resetParams();
 }
 
 FugueScore FugueScore::fromText(const std::string& text) {
