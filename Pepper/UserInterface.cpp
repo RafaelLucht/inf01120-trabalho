@@ -51,14 +51,88 @@ namespace UI {
 	        ImGui::SetNextWindowSize(ImVec2(width, height));
 	        ImGui::Begin("Top Bar", nullptr, PANEL_FLAGS);
 	        
+	        
 	        ImGui::Text("Music Generator");
 	        
 	        float buttonWidth = 80.0f;
 	        ImGui::SameLine(width - buttonWidth - 20.0f, 0.0f);
 	        if(ImGui::Button("Help",ImVec2(buttonWidth, 0)))	{
-				// Popup chave->evento (deixar por último)
+				ImGui::OpenPopup("Help Window");
 			}
-	        ImGui::End();
+	        
+	        // --- Janela de manual ---
+	        if (ImGui::BeginPopup("Help Window")) {
+		        
+		        const char* helpOptions[] = { "How to use", "Import .txt", "Export .txt", "Export MIDI","Score Map" };
+		        static int currentSelection = 0;
+		        
+		        ImGui::Text("Select a topic:");
+		        ImGui::SameLine();
+		        
+		        // 2. Render the dropdown menu
+		        ImGui::Combo("##HelpDropdown", &currentSelection, helpOptions, IM_ARRAYSIZE(helpOptions));
+		        
+		        ImGui::Separator();
+		        
+		        // 3. Render content based on what they chose
+		        switch (currentSelection) {
+					// --- Tutorial ---
+		            case 0:
+		                ImGui::TextWrapped	(
+			                "Use the text field to write your own fugue score (details on \"Score Map\" section)."
+			                "Each line controls a different voice in the fugue\n"
+			                "Once you're done writing, compile the text, then press play to listen."
+		                );
+		                break;
+		                
+		            // --- Import .txt ---
+		            case 1:
+		                ImGui::TextWrapped("Text files can be imported into the text field! Press the Import button and insert the text filename, then click OK to proceed.");
+		                break;
+		                
+	                // --- Export .txt ---
+		            case 2:
+		                ImGui::TextWrapped("The text field contents can be exported as a text file! Press the Export button and name your file, then click OK to proceed.");
+		                break;
+		                
+		            case 3:
+						ImGui::TextWrapped("After a score has been compiled, it can be exported as a MIDI file! Press the MIDI Export button and name your file, then click OK to proceed.");
+		                break;
+		                
+		            // --- Mapa ---
+		            case 4:
+		                ImGui::TextWrapped	(
+		                    "Text Mapping\n\n"
+						    "A: Note A (La)\n"
+						    "B: Note B (Si)\n"
+						    "C: Note C (Do)\n"
+						    "D: Note D (Re)\n"
+						    "E: Note E (Mi)\n"
+						    "F: Note F (Fa)\n"
+						    "G: Note G (Sol)\n"
+						    "H: B-flat\n"
+						    "Mb: E-flat\n\n"
+						
+						    "a-h: Skip beat\n"
+						    "Space: Double volume\n"
+						    "?: Octave up\n"
+						    "V: Octave down\n"
+						    ">: Increase BPM by 10\n"
+						    "<: Decrease BPM by 10\n\n"
+						
+						    "!: Switch to Harmonica (GM 22)\n"
+						    ";: Switch to Tubular Bells (GM 15)\n"
+						    "': Switch to Church Organ (GM 20)\n"
+						    "o, i, u: Switch to Bagpipe (GM 110)\n"
+						    "Even digit: Relative instrument change\n"
+						    "[n]: Delay line start by n beats\n"
+						    "Any other character: Repeat last note"
+		                );
+		                break;
+		        }
+		        ImGui::EndPopup();
+		    }
+		    ImGui::End();
 	    }
 	
 		// --- Seção Sestra: Entrada de dados (texto, arquivo) ---
@@ -102,6 +176,9 @@ namespace UI {
 			ImGui::EndDisabled();
 			ImGui::SameLine();
 		    
+		    static bool fileImportError = false; // Gambiarra pro ImGui ficar feliz
+		    static bool fileExportError = false;
+		    
 		    // --- Import .txt ---
 			if (ImGui::BeginPopupModal("Import txt", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 				
@@ -140,11 +217,17 @@ namespace UI {
 				    catch (const std::exception &e) {
 						ImGui::CloseCurrentPopup();
 				        txtFileErrorMessage = e.what();
-				        ImGui::OpenPopup("Could not open file");
+				        fileImportError = true;
 				    }
 				}
 				ImGui::EndPopup();
 			}
+			
+			if (fileImportError)	{
+				ImGui::OpenPopup("Could not open file");
+				fileImportError = false;
+			}
+			
 		    if (ImGui::BeginPopup("Could not open file")) {
 		        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Error:");
 		        ImGui::TextWrapped("%s", txtFileErrorMessage.c_str());
@@ -188,12 +271,18 @@ namespace UI {
 				    catch (const std::exception &e) {
 						ImGui::CloseCurrentPopup();
 				        txtFileErrorMessage = e.what();
-				        ImGui::OpenPopup("Could not open file");
+				        fileExportError = true;
 				    }
 				}
 				ImGui::EndPopup();
 			}
-			if (ImGui::BeginPopup("Could not open file")) {
+			
+			if (fileExportError)	{
+				ImGui::OpenPopup("Could not create file");
+				fileExportError = false;
+			}
+			
+			if (ImGui::BeginPopup("Could not create file")) {
 		        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Error:");
 		        ImGui::TextWrapped("%s", txtFileErrorMessage.c_str());
 		        
@@ -325,9 +414,11 @@ namespace UI {
 	        ImGui::EndDisabled();
 	        
 	        
+	        static bool midiFileError = false;
+	        
 	        if (ImGui::BeginPopupModal("Export MIDI", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 		        ImGui::Text("Enter the filename to export:");
-		        ImGui::InputTextWithHint("##mid_filename", "fugue.mid", midFilenameBuffer.data(), midFilenameBuffer.size());
+		        ImGui::InputTextWithHint("##mid_filename", "my_fugue.mid", midFilenameBuffer.data(), midFilenameBuffer.size());
 		        
 		        ImGui::Spacing();
 		        ImGui::Separator();
@@ -353,11 +444,17 @@ namespace UI {
 		                midFileErrorMessage = e.what();
 		                
 		                ImGui::CloseCurrentPopup(); 
-		                ImGui::OpenPopup("Export Error"); 
+		                midiFileError = true;
 		            }
 				}
 		        ImGui::EndPopup();
 		    }
+		    
+		    if (midiFileError)	{
+				ImGui::OpenPopup("Export Error");
+				midiFileError = false;
+			}
+		    
 		    if (ImGui::BeginPopup("Export Error")) {
 		        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Could not export MIDI file!");
 		        ImGui::TextWrapped("%s", midFileErrorMessage.c_str());
