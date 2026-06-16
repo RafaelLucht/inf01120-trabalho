@@ -28,7 +28,7 @@ public:
 	void setDelay(int n);
 	
 	void addEvent(std::unique_ptr<AudioEvent> event);
-	
+	void setVolume(short vol);
 	int getDelay() const;
 	int getVoiceIndex() const;
 	const AudioParameters& getParams() const;
@@ -48,6 +48,8 @@ public:
 	int getVoiceCount() const;
 
 	void play();
+	
+	void updateVoiceVolume(int voiceIndex, short newVolume);
 	
 	static FugueScore fromText(const std::string& text);
 };

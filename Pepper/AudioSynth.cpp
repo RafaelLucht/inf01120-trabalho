@@ -27,14 +27,16 @@ void Voice::setDelay(int n)	{
 void Voice::addEvent(std::unique_ptr<AudioEvent> event) {
 	events.push_back(std::move(event));
 }
-
+void Voice::setVolume(short vol)	{
+	params.vol.set(vol);
+}
 int Voice::getDelay() const	{
 	return delay;
 }
 int Voice::getVoiceIndex() const	{
 	return voiceIndex;
 }
-const AudioParameters& Voice::getParams() const	{
+const AudioParameters &Voice::getParams() const	{
 	return params;
 }
 const std::vector<std::unique_ptr<AudioEvent>>& Voice::getEvents() const {
@@ -145,6 +147,11 @@ void FugueScore::play() {
         }
 	}
 }
+
+void FugueScore::updateVoiceVolume(int voiceIndex, short newVolume)	{
+	voices[voiceIndex].setVolume(newVolume);
+}
+
 FugueScore FugueScore::fromText(const std::string& text) {
 	FugueScore score;
 	std::vector<Voice> voices = VoiceParser::parse(text);

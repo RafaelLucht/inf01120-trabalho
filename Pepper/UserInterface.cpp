@@ -66,8 +66,8 @@ namespace UI {
 			
 	        // --- Variáveis de texto ---
 	        static std::array<char, 5000> textBuffer{};
-	        static std::array<char, 128> filenameBuffer{};
-	        static std::string errorMessage{};
+	        static std::array<char, 128> txtFilenameBuffer{};
+	        static std::string txtFileErrorMessage{};
 	        
 			// --- Inicializa janela ---
 			ImGui::PushID(&textBuffer);
@@ -82,14 +82,14 @@ namespace UI {
 	        // --- Import .txt ---
 	        ImGui::BeginDisabled(state == AppState::PLAYING_MUSIC);
 	        if (ImGui::Button("Import from .txt"))	{
-				filenameBuffer = {};
+				txtFilenameBuffer = {};
 				ImGui::OpenPopup("Import txt");
 			}
 	        ImGui::EndDisabled();
 			if (ImGui::BeginPopupModal("Import txt", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 				
-			    ImGui::Text("Enter the filename to load (include \".txt\"):");
-			    ImGui::InputTextWithHint("##filename", "fugue.txt", filenameBuffer.data(), filenameBuffer.size());
+			    ImGui::Text("Enter the text filename to load:");
+			    ImGui::InputTextWithHint("##filename", "fugue.txt", txtFilenameBuffer.data(), txtFilenameBuffer.size());
 			    
 			    ImGui::Spacing();
 			    ImGui::Separator();
@@ -103,8 +103,12 @@ namespace UI {
 			    
 			    if (ImGui::Button("OK", ImVec2(120, 0))) {
 				    try {
+						std::string fullPath = txtFilenameBuffer.data();
+		                
+		                if (fullPath.find(".txt") == std::string::npos)
+		                    fullPath += ".txt";
 						
-				        std::string content = FileManager::loadText(filenameBuffer.data());
+				        std::string content = FileManager::loadText(fullPath);
 				        
 				        // --- Trunca string se for maior que o buffer ---
 				        if (content.size() >= textBuffer.size()) {
@@ -117,15 +121,15 @@ namespace UI {
 				    }
 				    catch (const std::exception &e) {
 						ImGui::CloseCurrentPopup();
-				        errorMessage = e.what();
+				        txtFileErrorMessage = e.what();
 				        ImGui::OpenPopup("Could not open file");
 				    }
 				}
 				ImGui::EndPopup();
 			}
-		    if (ImGui::BeginPopupModal("Could not open file", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+		    if (ImGui::BeginPopup("Could not open file")) {
 		        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Error:");
-		        ImGui::TextWrapped("%s", errorMessage.c_str());
+		        ImGui::TextWrapped("%s", txtFileErrorMessage.c_str());
 		        
 		        ImGui::Spacing();
 		        ImGui::Separator();
@@ -158,26 +162,69 @@ namespace UI {
 	
 		// --- Seção Destra: Parâmetros das vozes (fazer MVP funcionar antes) ---
 	    void RenderParameters(float width, float height, float leftOffset, float topOffset, FugueScore &score) {
-	        ImGui::SetNextWindowPos(ImVec2(leftOffset, topOffset));
-	        ImGui::SetNextWindowSize(ImVec2(width, height));
-	        ImGui::Begin("Parameters", nullptr, PANEL_FLAGS);
-	        
-	        ImGui::Text("Score Parameters");
-	        ImGui::Separator();
-	        
-	        // --- Exemplos estáticos temporários ---
-	        static int instrumentIndex = 0;
-	        const char* instruments[] = { "Sine Wave", "Square Wave", "Sawtooth", "Custom Sampler" };
-	        ImGui::SetNextItemWidth(-1);
-	        ImGui::Combo("##Instrument", &instrumentIndex, instruments, IM_ARRAYSIZE(instruments));
-	        
-	        static float volume = 0.5f;
-	        ImGui::Text("Volume");
-	        ImGui::SetNextItemWidth(-1);
-	        ImGui::SliderFloat("##Volume", &volume, 0.0f, 1.0f);
-	        
-	        ImGui::End();
-	    }
+    
+		    ImGui::SetNextWindowPos(ImVec2(leftOffset, topOffset));
+		    ImGui::SetNextWindowSize(ImVec2(width, height));
+		    ImGui::Begin("Voice Parameters", nullptr, PANEL_FLAGS);
+		    
+		    ImGui::Text("Fugue Composition");
+		    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Total Voices: %d", score.getVoiceCount());
+		    ImGui::Separator();
+		    ImGui::Spacing();
+		    
+		    const std::vector<Voice> &voices = score.getVoices();
+		    
+		    // --- Lista vozes e parâmetros ---
+		    for (auto i = 0; i < voices.size(); ++i) {
+		        auto params = voices[i].getParams(); 
+		        
+		        std::string headerName = "Voice #" + std::to_string(i);
+		        
+		        if (ImGui::CollapsingHeader(headerName.c_str())) {
+		            ImGui::Indent();
+		            
+		            auto instName = std::string(params.inst.getName());
+		            ImGui::Text("Instrument: %s", instName.c_str());
+		            ImGui::Text("BPM: %d", static_cast<int>(params.bpm.get()));
+		            ImGui::Text("Octave: %s", params.oct.getName().c_str());
+		            
+		            ImGui::Spacing();
+		            
+		            short currentVol = params.vol.get(); 
+			        auto minVol = params.vol.getMin();
+			        auto maxVol = params.vol.getMax();
+			
+			        std::string sliderId = "##volume_slider_" + std::to_string(i);
+		            
+		            ImGui::Text("Volume Control:");
+			        ImGui::SameLine();
+			        ImGui::SetNextItemWidth(-1);
+			        
+			        if (ImGui::SliderScalar(sliderId.c_str(), ImGuiDataType_S16, &currentVol, &minVol, &maxVol, "%d")) {
+			            score.updateVoiceVolume(i, currentVol);
+			        }
+		            
+		            ImGui::Spacing();
+		            ImGui::Separator();
+		            ImGui::Spacing();
+		            
+					// --- Reset da voz ---
+		            //~ std::string resetBtnId = "Reset voice parameters to default##" + std::to_string(i);
+		            //~ if (ImGui::Button(resetBtnId.c_str())) {
+		                //~ voices[i].getParams().resetToDefaultAll(); 
+		            //~ }
+		            
+		            ImGui::Unindent();
+		            ImGui::Spacing();
+		        }
+		    }
+		    
+		    if (voices.empty()) {
+		        ImGui::SetCursorPos(ImVec2(width * 0.15f, height * 0.4f));
+		        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No voices loaded.\nAwaiting score compilation");
+		    }
+		    ImGui::End();
+		}
 	
 		// --- Seção Inferior ---
 	    void RenderPlayerBar(float width, float height, float topOffset, FugueScore &score, AppState &state) {
@@ -185,6 +232,9 @@ namespace UI {
 	        ImGui::SetNextWindowPos(ImVec2(0, topOffset));
 	        ImGui::SetNextWindowSize(ImVec2(width, height));
 	        ImGui::Begin("Player", nullptr, PANEL_FLAGS);
+	        
+	        static std::array<char, 128> midFilenameBuffer{};
+	        static std::string midFileErrorMessage{};
 	        
 	        // --- Flag para thread de áudio ---
 	        static std::atomic<bool> musicThreadOn = false;
@@ -213,9 +263,55 @@ namespace UI {
 			
 			ImGui::BeginDisabled(state != AppState::INPUT_COMPILED);
 			if (ImGui::Button("Export .mid"))	{
-				// Ignorar por enquanto
+				ImGui::OpenPopup("Export MIDI");
 			}
 	        ImGui::EndDisabled();
+	        
+	        if (ImGui::BeginPopupModal("Export MIDI", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+		        ImGui::Text("Enter the filename to export:");
+		        ImGui::InputTextWithHint("##mid_filename", "fugue.mid", midFilenameBuffer.data(), midFilenameBuffer.size());
+		        
+		        ImGui::Spacing();
+		        ImGui::Separator();
+		        ImGui::Spacing();
+		        
+		        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+		            ImGui::CloseCurrentPopup();
+		        }
+		        ImGui::SameLine();
+		        if (ImGui::Button("Save", ImVec2(120, 0))) {
+		            try {
+		                std::string fullPath = midFilenameBuffer.data();
+		                
+		                if (fullPath.find(".mid") == std::string::npos) {
+		                    fullPath += ".mid";
+		                }
+		                
+		                MidiExporter::exportToFile(score, fullPath);
+		                
+		                ImGui::CloseCurrentPopup();
+		            }
+		            catch (const std::exception &e) {
+		                midFileErrorMessage = e.what();
+		                
+		                ImGui::CloseCurrentPopup(); 
+		                ImGui::OpenPopup("Export Error"); 
+		            }
+				}
+		        ImGui::EndPopup();
+		    }
+		    if (ImGui::BeginPopup("Export Error")) {
+		        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Could not export MIDI file!");
+		        ImGui::TextWrapped("%s", midFileErrorMessage.c_str());
+		        
+		        ImGui::Spacing();
+		        if (ImGui::Button("Dismiss", ImVec2(120, 0))) {
+		            ImGui::CloseCurrentPopup();
+		        }
+		        
+		        ImGui::EndPopup();
+		    }
+				    
 	        
 	        ImGui::End();
 	    }
@@ -301,8 +397,8 @@ namespace UI {
 	    }
 	        
 	    // --- Cálculos usando o tamanho dinâmico da janela ---
-	    float topBarHeight = 60.0f;
-	    float bottomBarHeight = 100.0f;
+	    float topBarHeight = 40.0f;
+	    float bottomBarHeight = 40.0f;
 	    float middleHeight = currentHeight - topBarHeight - bottomBarHeight;
 	    float leftWidth = currentWidth * 0.60f;
 	    float rightWidth = currentWidth - leftWidth;

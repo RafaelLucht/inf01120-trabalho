@@ -1,0 +1,1 @@
+g++ *.cpp imgui/*.cpp imgui/backends/*.cpp -I imgui -I imgui/backends -o Sound -lrtmidi -lasound -pthread -lglfw -lGL -lX11 -lpthread -lXrandr -lXi
